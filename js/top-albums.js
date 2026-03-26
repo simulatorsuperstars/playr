@@ -1,6 +1,8 @@
 const list = document.getElementById("top-albums");
 
 function renderTopAlbums() {
+    if (!list) return;
+
     const ranked = albums
         .map(album => {
             const stats = getAlbumStats(album);
@@ -28,4 +30,8 @@ function renderTopAlbums() {
     `).join("");
 }
 
-renderTopAlbums();
+if (window.playrData && window.playrData.ready) {
+    window.playrData.ready.then(renderTopAlbums);
+} else {
+    renderTopAlbums();
+}

@@ -122,8 +122,12 @@ function generate() {
 
 function nextId() {
     try {
-        if (Array.isArray(window.albums) && window.albums.length) {
-            return Math.max(...window.albums.map(a => a.id || 0)) + 1;
+        const sourceAlbums = (window.playrData && Array.isArray(window.playrData.albums) && window.playrData.albums.length)
+            ? window.playrData.albums
+            : window.albums;
+
+        if (Array.isArray(sourceAlbums) && sourceAlbums.length) {
+            return Math.max(...sourceAlbums.map(a => a.id || 0)) + 1;
         }
     } catch (e) {}
     return Date.now();

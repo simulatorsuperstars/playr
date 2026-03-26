@@ -37,7 +37,24 @@
         </div>
     </div>
 
-    <script src="js/data.js"></script>
+    <div id="preview-modal" class="preview-modal hidden" aria-hidden="true">
+        <div class="preview-backdrop"></div>
+        <div class="preview-box" role="dialog" aria-modal="true" aria-labelledby="preview-track-title">
+            <button id="preview-close" class="preview-close" aria-label="Close preview player">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+            <div class="preview-header">
+                <img id="preview-cover" class="preview-cover" alt="Album cover">
+                <div class="preview-meta">
+                    <div id="preview-track-title" class="preview-track-title"></div>
+                    <div id="preview-track-subtitle" class="preview-track-subtitle"></div>
+                </div>
+            </div>
+            <audio id="preview-audio" class="preview-audio" controls preload="none"></audio>
+        </div>
+    </div>
+
+    <script src="js/music-api.js"></script>
     <script src="js/app.js"></script>
 </body>
 
