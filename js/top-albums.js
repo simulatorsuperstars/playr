@@ -31,8 +31,8 @@ function renderTopAlbums() {
     `).join("");
 }
 
-if (window.playrData && window.playrData.ready) {
-    window.playrData.ready.then(renderTopAlbums);
+if (window.needleData && window.needleData.ready) {
+    window.needleData.ready.then(renderTopAlbums);
 } else {
     renderTopAlbums();
 }

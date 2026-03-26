@@ -63,8 +63,8 @@ function renderTopTracks() {
     }
 }
 
-if (window.playrData && window.playrData.ready) {
-    window.playrData.ready.then(renderTopTracks);
+if (window.needleData && window.needleData.ready) {
+  window.needleData.ready.then(renderTopTracks);
 } else {
     renderTopTracks();
 }

@@ -360,5 +360,5 @@
       return state.albums;
     });
 
-  window.playrData = state;
+  window.needleData = state;
 })();

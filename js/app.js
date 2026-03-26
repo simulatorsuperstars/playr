@@ -451,14 +451,14 @@ let searchTimer = null;
 let activeSearchRequest = 0;
 
 async function syncSearchResults(searchQuery, requestId) {
-  if (grid && !page && window.playrData && typeof window.playrData.searchSongs === "function") {
+  if (grid && !page && window.needleData && typeof window.needleData.searchSongs === "function") {
     const query = searchQuery.trim();
 
     if (grid && query) {
       grid.innerHTML = '<p style="opacity:.7">Searching...</p>';
     }
 
-    const nextTracks = await window.playrData.searchSongs(searchQuery);
+    const nextTracks = await window.needleData.searchSongs(searchQuery);
     if (requestId !== activeSearchRequest) return;
 
     await ensureHomeAlbumsLoaded(nextTracks);
@@ -469,7 +469,7 @@ async function syncSearchResults(searchQuery, requestId) {
     return;
   }
 
-  if (!window.playrData || typeof window.playrData.searchAlbums !== "function") {
+  if (!window.needleData || typeof window.needleData.searchAlbums !== "function") {
     render(searchQuery);
     return;
   }
@@ -480,7 +480,7 @@ async function syncSearchResults(searchQuery, requestId) {
     grid.innerHTML = '<p style="opacity:.7">Searching...</p>';
   }
 
-  const nextAlbums = await window.playrData.searchAlbums(searchQuery);
+  const nextAlbums = await window.needleData.searchAlbums(searchQuery);
   if (requestId !== activeSearchRequest) return;
 
   albums = Array.isArray(nextAlbums) ? nextAlbums : [];
@@ -1410,10 +1410,10 @@ function render(searchQuery = searchInput ? searchInput.value : "") {
 }
 
 async function ensureAlbumsLoaded() {
-  if (window.playrData && window.playrData.ready) {
-    await window.playrData.ready;
-    albums = Array.isArray(window.playrData.albums) ? window.playrData.albums : [];
-    homeTracks = Array.isArray(window.playrData.topSongs) ? window.playrData.topSongs.slice() : [];
+  if (window.needleData && window.needleData.ready) {
+    await window.needleData.ready;
+    albums = Array.isArray(window.needleData.albums) ? window.needleData.albums : [];
+    homeTracks = Array.isArray(window.needleData.topSongs) ? window.needleData.topSongs.slice() : [];
     await ensureHomeAlbumsLoaded(homeTracks);
     return;
   }
@@ -1423,7 +1423,7 @@ async function ensureAlbumsLoaded() {
 }
 
 async function ensureHomeAlbumsLoaded(tracks = homeTracks) {
-  if (!grid || page || !window.playrData || typeof window.playrData.fetchAlbumById !== "function") {
+  if (!grid || page || !window.needleData || typeof window.needleData.fetchAlbumById !== "function") {
     return;
   }
 
@@ -1440,7 +1440,7 @@ async function ensureHomeAlbumsLoaded(tracks = homeTracks) {
   await Promise.all(
     missingIds.map(async (collectionId) => {
       try {
-        await window.playrData.fetchAlbumById(collectionId);
+        await window.needleData.fetchAlbumById(collectionId);
       } catch (error) {
         return null;
       }
@@ -1448,11 +1448,11 @@ async function ensureHomeAlbumsLoaded(tracks = homeTracks) {
     })
   );
 
-  albums = Array.isArray(window.playrData.albums) ? window.playrData.albums : albums;
+  albums = Array.isArray(window.needleData.albums) ? window.needleData.albums : albums;
 }
 
 async function ensurePageAlbumLoaded() {
-  if (!page || !window.playrData || typeof window.playrData.fetchAlbumById !== "function") {
+  if (!page || !window.needleData || typeof window.needleData.fetchAlbumById !== "function") {
     return;
   }
 
@@ -1461,7 +1461,7 @@ async function ensurePageAlbumLoaded() {
     return;
   }
 
-  const album = await window.playrData.fetchAlbumById(id);
+  const album = await window.needleData.fetchAlbumById(id);
   if (!album || albums.some((existingAlbum) => existingAlbum.id === album.id)) {
     return;
   }

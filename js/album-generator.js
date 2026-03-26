@@ -122,8 +122,8 @@ function generate() {
 
 function nextId() {
     try {
-        const sourceAlbums = (window.playrData && Array.isArray(window.playrData.albums) && window.playrData.albums.length)
-            ? window.playrData.albums
+        const sourceAlbums = (window.needleData && Array.isArray(window.needleData.albums) && window.needleData.albums.length)
+            ? window.needleData.albums
             : window.albums;
 
         if (Array.isArray(sourceAlbums) && sourceAlbums.length) {
