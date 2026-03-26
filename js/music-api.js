@@ -9,6 +9,15 @@
     return url.replace(COVER_SIZE_RX, "/600x600bb.");
   }
 
+  function normalizeReleaseType(value, fallback = "Album") {
+    const text = String(value || "").trim().toLowerCase();
+    if (!text) return fallback;
+    if (text.includes("single")) return "Single";
+    if (text === "ep" || text.includes("extended play") || /\bep\b/.test(text)) return "EP";
+    if (text.includes("album")) return "Album";
+    return fallback;
+  }
+
   async function fetchJson(url) {
     const response = await fetch(url);
     if (!response.ok) {
@@ -38,6 +47,7 @@
         artist,
         year,
         cover,
+        releaseType: "Album",
         discs: [{ name: "Disc 1", tracks: [] }]
       };
     });
@@ -57,6 +67,7 @@
       name: result.trackName || fallback.name || "Unknown Track",
       artist: result.artistName || fallback.artist || "Unknown Artist",
       album: result.collectionName || fallback.album || "Unknown Album",
+      releaseType: normalizeReleaseType(result.collectionType || fallback.releaseType, "Album"),
       cover: toCover(result.artworkUrl100 || result.artworkUrl60 || result.artworkUrl30 || fallback.cover || ""),
       genre: result.primaryGenreName || fallback.genre || "",
       previewUrl: result.previewUrl || fallback.previewUrl || "",
@@ -130,6 +141,7 @@
       artist: result.artistName || "Unknown Artist",
       year: yearLabel ? Number(String(yearLabel).slice(0, 4)) : null,
       cover: toCover(result.artworkUrl100 || result.artworkUrl60 || result.artworkUrl30 || ""),
+      releaseType: normalizeReleaseType(result.collectionType, "Album"),
       genre: result.primaryGenreName || "",
       trackCount: result.trackCount || 0,
       releaseDate: result.releaseDate || "",
@@ -205,6 +217,7 @@
       artist: album.artist || collection.artistName || "Unknown Artist",
       year: album.year || (yearLabel ? Number(String(yearLabel).slice(0, 4)) : null),
       cover: album.cover || toCover(collection.artworkUrl100 || collection.artworkUrl60 || collection.artworkUrl30 || ""),
+      releaseType: album.releaseType || normalizeReleaseType(collection.collectionType, "Album"),
       genre: album.genre || collection.primaryGenreName || "",
       trackCount: album.trackCount || collection.trackCount || tracks.length,
       releaseDate: album.releaseDate || collection.releaseDate || "",
@@ -230,6 +243,7 @@
             artist: album.artist,
             year: album.year,
             cover: album.cover,
+            releaseType: album.releaseType || "Album",
             discs: [{ name: "Disc 1", tracks: [] }]
           };
         }

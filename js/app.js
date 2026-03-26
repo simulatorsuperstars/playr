@@ -1,14 +1,31 @@
 let albums = [];
 let homeTracks = [];
 
+function centerOverlayBox(box) {
+  if (!box) return;
+
+  const centerX = window.scrollX + window.innerWidth / 2;
+  const centerY = window.scrollY + window.innerHeight / 2;
+
+  box.style.position = "absolute";
+  box.style.left = centerX + "px";
+  box.style.top = centerY + "px";
+  box.style.transform = "translate(-50%, -50%)";
+}
+
 class DialogManager {
   constructor() {
     this.modal = document.getElementById('dialog-modal');
+    this.box = this.modal ? this.modal.querySelector('.dialog-box') : null;
     this.titleEl = document.getElementById('dialog-title');
     this.messageEl = document.getElementById('dialog-message');
     this.cancelBtn = document.getElementById('dialog-cancel');
     this.confirmBtn = document.getElementById('dialog-confirm');
     this.resolve = null;
+    this.handleViewportChange = () => {
+      if (!this.modal || this.modal.classList.contains('hidden')) return;
+      centerOverlayBox(this.box);
+    };
 
     if (this.cancelBtn) {
       this.cancelBtn.addEventListener('click', () => this.close(false));
@@ -21,6 +38,9 @@ class DialogManager {
     if (backdrop) {
       backdrop.addEventListener('click', () => this.close(false));
     }
+
+    window.addEventListener('scroll', this.handleViewportChange, { passive: true });
+    window.addEventListener('resize', this.handleViewportChange);
   }
 
   show(title, message) {
@@ -33,6 +53,8 @@ class DialogManager {
       this.titleEl.textContent = title;
       this.messageEl.textContent = message;
       this.modal.classList.remove('hidden');
+      centerOverlayBox(this.box);
+      requestAnimationFrame(() => centerOverlayBox(this.box));
       this.confirmBtn.focus();
     });
   }
@@ -72,12 +94,17 @@ const ALBUM_THEME_VARS = [
 class PreviewPlayer {
   constructor() {
     this.modal = document.getElementById("preview-modal");
+    this.box = this.modal ? this.modal.querySelector(".preview-box") : null;
     this.audio = document.getElementById("preview-audio");
     this.cover = document.getElementById("preview-cover");
     this.titleEl = document.getElementById("preview-track-title");
     this.subtitleEl = document.getElementById("preview-track-subtitle");
     this.closeBtn = document.getElementById("preview-close");
     this.trackLink = document.getElementById("preview-track-link");
+    this.handleViewportChange = () => {
+      if (!this.modal || this.modal.classList.contains("hidden")) return;
+      centerOverlayBox(this.box);
+    };
 
     if (!this.modal || !this.audio) return;
 
@@ -102,6 +129,9 @@ class PreviewPlayer {
         this.close();
       }
     });
+
+    window.addEventListener("scroll", this.handleViewportChange, { passive: true });
+    window.addEventListener("resize", this.handleViewportChange);
   }
 
   isOpen() {
@@ -124,6 +154,8 @@ class PreviewPlayer {
     }
     this.modal.classList.remove("hidden");
     this.modal.setAttribute("aria-hidden", "false");
+    centerOverlayBox(this.box);
+    requestAnimationFrame(() => centerOverlayBox(this.box));
     activePreviewTrackKey = track.key;
 
     try {
@@ -499,6 +531,12 @@ function getAlbumGenre(album) {
   return album && typeof album.genre === "string" ? album.genre : "";
 }
 
+function getReleaseLabel(item) {
+  return item && typeof item.releaseType === "string" && item.releaseType
+    ? item.releaseType
+    : "Album";
+}
+
 function getAlbumTrackCount(album) {
   if (!album) return 0;
   if (typeof album.trackCount === "number" && album.trackCount > 0) return album.trackCount;
@@ -826,7 +864,7 @@ async function renderAlbumPoster(album) {
 
   context.fillStyle = colors.accentStrong;
   context.font = "700 24px Space Grotesk, sans-serif";
-  context.fillText((getAlbumGenre(album) || "ALBUM").toUpperCase(), padding + coverSize + 56, padding + 28);
+  context.fillText((getAlbumGenre(album) || getReleaseLabel(album)).toUpperCase(), padding + coverSize + 56, padding + 28);
 
   context.fillStyle = colors.text;
   context.font = "700 72px Space Grotesk, sans-serif";
@@ -849,7 +887,7 @@ async function renderAlbumPoster(album) {
   const albumRating = normalizeRatingToHalf(getAlbumScore(album));
   context.fillStyle = colors.muted;
   context.font = "600 20px Space Grotesk, sans-serif";
-  context.fillText("Album Rating", padding + coverSize + 56, padding + 308);
+  context.fillText("Rating", padding + coverSize + 56, padding + 308);
   drawCanvasStars(context, albumRating, padding + coverSize + 68, padding + 344, 24, colors);
 
   context.strokeStyle = colors.border;
@@ -1162,6 +1200,7 @@ function render(searchQuery = searchInput ? searchInput.value : "") {
       const key = getHomeTrackKey(track);
       const sourceAlbum = getAlbumByCollectionId(track.collectionId);
       const albumRating = sourceAlbum ? getAlbumScore(sourceAlbum) : 0;
+      const releaseLabel = getReleaseLabel(sourceAlbum || track);
       const div = document.createElement("div");
       div.className = "album-card home-track-card";
       div.innerHTML = `
@@ -1178,7 +1217,7 @@ function render(searchQuery = searchInput ? searchInput.value : "") {
         <span class="score-label home-track-rating">${albumRating ? generateStars("album_display_" + (sourceAlbum ? sourceAlbum.id : key), albumRating, true) : "Not rated"}</span>
         <div class="home-track-buttons">
           ${track.previewUrl ? `<button class="preview-btn" data-track-key="${key}" data-preview-url="${escapeAttribute(track.previewUrl)}" data-track-name="${escapeAttribute(track.name)}" data-track-artist="${escapeAttribute(track.artist)}" data-track-album="${escapeAttribute(track.album || "")}" data-track-cover="${escapeAttribute(track.cover || "")}" data-track-url="${escapeAttribute(track.trackUrl || "")}" aria-label="Open preview player" onclick="openTrackPreview('${key}', this)"><i class="fa-solid fa-play"></i></button>` : ""}
-          ${track.collectionId ? `<a class="open-btn home-icon-btn" href="album.html?id=${track.collectionId}" aria-label="Open album"><i class="fa-solid fa-record-vinyl"></i></a>` : (track.trackUrl ? `<a class="open-btn home-icon-btn" href="${track.trackUrl}" target="_blank" rel="noreferrer" aria-label="Open track"><i class="fa-solid fa-arrow-up-right-from-square"></i></a>` : "")}
+          ${track.collectionId ? `<a class="open-btn home-icon-btn" href="album.html?id=${track.collectionId}" aria-label="Open ${escapeAttribute(releaseLabel.toLowerCase())}"><i class="fa-solid fa-record-vinyl"></i></a>` : (track.trackUrl ? `<a class="open-btn home-icon-btn" href="${track.trackUrl}" target="_blank" rel="noreferrer" aria-label="Open track"><i class="fa-solid fa-arrow-up-right-from-square"></i></a>` : "")}
         </div>
       </div>
     </div>
@@ -1205,7 +1244,7 @@ function render(searchQuery = searchInput ? searchInput.value : "") {
       const genreMatch = getAlbumGenre(album).toLowerCase().includes(query);
 
       if (albumTitleMatch) {
-        matchLabel = "Matched album title";
+        matchLabel = `Matched ${getReleaseLabel(album).toLowerCase()} title`;
       } else if (artistMatch) {
         matchLabel = "Matched artist";
       } else if (genreMatch) {
@@ -1246,7 +1285,7 @@ function render(searchQuery = searchInput ? searchInput.value : "") {
       <div class="score score-row">
         <span class="score-label">${rating ? generateStars("album_display_" + album.id, rating, true) : "Not rated"}</span>
       </div>
-      <a class="open-btn" href="album.html?id=${album.id}">Open Album</a>
+      <a class="open-btn" href="album.html?id=${album.id}">Open ${getReleaseLabel(album)}</a>
     </div>
     `;
 
@@ -1271,7 +1310,7 @@ function render(searchQuery = searchInput ? searchInput.value : "") {
       <img src="${album.cover}">
 
       <div class="album-right">
-      <div class="album-kicker">${getAlbumGenre(album) || "Album"}</div>
+      <div class="album-kicker">${getAlbumGenre(album) || getReleaseLabel(album)}</div>
       <div class="album-meta">
         <h2>${album.title}</h2>
         <p>${album.artist} • ${album.year || ""}</p>
@@ -1282,7 +1321,7 @@ function render(searchQuery = searchInput ? searchInput.value : "") {
         <div class="album-links">${getAlbumLinkButtons(album)}<button class="meta-link secondary export-btn" onclick="exportAlbumAsImage('${album.id}', this)"><i class="fa-solid fa-image"></i><span>Export as Image</span></button></div>
 
         <div class="album-rating">
-        <h3>Album Rating</h3>
+        <h3>Rating</h3>
         ${generateStars("album_display_" + album.id, rating, true)}
 
           <button class="reset-rating" onclick="resetAlbumRating('${album.id}')" aria-label="Reset ratings">
