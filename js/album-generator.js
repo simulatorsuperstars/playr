@@ -1,11 +1,5 @@
 function el(id) { return document.getElementById(id) }
 
-const catalogState = {
-    results: [],
-    loading: false,
-    selectedAlbumSource: null
-};
-
 function createTrackRow(idx, name = '') {
     const div = document.createElement('div');
     div.className = 'track-item';
@@ -120,14 +114,6 @@ function generate() {
         cover: el('cover').value.trim(),
         discs: discs.length ? discs : [{ name: 'Disc 1', tracks: [] }]
     };
-
-    if (catalogState.selectedAlbumSource) {
-        album.catalog = {
-            provider: catalogState.selectedAlbumSource.provider,
-            id: catalogState.selectedAlbumSource.id
-        };
-    }
-
     const json = JSON.stringify(album, null, 2);
     el('output').value = json;
     el('output-js').value = formatForDataJS(album);
@@ -150,7 +136,6 @@ function formatForDataJS(album) {
     const year = (album.year === null || album.year === undefined) ? null : album.year;
     const cover = album.cover || '';
     const discs = album.discs || [];
-    const catalog = album.catalog || null;
 
     const lines = [];
     lines.push('{');
@@ -159,12 +144,6 @@ function formatForDataJS(album) {
     lines.push(`  artist: ${JSON.stringify(artist)},`);
     lines.push(`  year: ${year === null ? null : year},`);
     lines.push(`  cover: ${JSON.stringify(cover)},`);
-    if (catalog && catalog.provider && catalog.id) {
-        lines.push('  catalog: {');
-        lines.push(`    provider: ${JSON.stringify(catalog.provider)},`);
-        lines.push(`    id: ${JSON.stringify(catalog.id)}`);
-        lines.push('  },');
-    }
     lines.push('  discs: [');
     discs.forEach((d, di) => {
                 lines.push('    {');
@@ -216,153 +195,6 @@ function addTrackToDisc(discEl) {
     tracksContainer.appendChild(createTrackRow(idx));
 }
 
-function setCatalogStatus(message, isError = false) {
-    const status = el('catalog-status');
-    if (!status) return;
-    status.textContent = message || '';
-    status.classList.toggle('error', Boolean(isError));
-}
-
-function setCatalogLoading(isLoading) {
-    catalogState.loading = isLoading;
-    const searchButton = el('catalog-search');
-    const termInput = el('catalog-term');
-    const providerSelect = el('catalog-provider');
-
-    if (searchButton) {
-        searchButton.disabled = isLoading;
-        searchButton.textContent = isLoading ? 'Searching...' : 'Search';
-    }
-
-    if (termInput) termInput.disabled = isLoading;
-    if (providerSelect) providerSelect.disabled = isLoading;
-}
-
-function renderCatalogResults() {
-    const container = el('catalog-results');
-    if (!container) return;
-
-    container.innerHTML = '';
-
-    catalogState.results.forEach((result, index) => {
-        const card = document.createElement('article');
-        card.className = 'catalog-result';
-
-        const cover = document.createElement('img');
-        cover.src = result.cover || '';
-        cover.alt = `${result.title} cover`;
-        cover.loading = 'lazy';
-
-        const info = document.createElement('div');
-        const title = document.createElement('h4');
-        title.textContent = result.title;
-        const meta = document.createElement('p');
-        meta.textContent = `${result.artist} • ${result.year || 'Unknown year'} • ${result.totalTracks || 0} tracks`;
-        info.appendChild(title);
-        info.appendChild(meta);
-
-        const button = document.createElement('button');
-        button.textContent = 'Import';
-        button.addEventListener('click', () => importCatalogAlbum(index));
-
-        card.appendChild(cover);
-        card.appendChild(info);
-        card.appendChild(button);
-        container.appendChild(card);
-    });
-}
-
-function getCatalogErrorMessage(error) {
-    if (error instanceof TypeError) {
-        return 'Catalog API is unavailable here. Use `vercel dev` locally or deploy the site to Vercel.';
-    }
-
-    return error.message || 'Could not reach the catalog API.';
-}
-
-async function searchCatalog() {
-    const termInput = el('catalog-term');
-    const providerSelect = el('catalog-provider');
-    const term = termInput ? termInput.value.trim() : '';
-    const provider = providerSelect ? providerSelect.value : 'itunes';
-
-    if (!term) {
-        setCatalogStatus('Enter an album or artist to search.', true);
-        return;
-    }
-
-    setCatalogLoading(true);
-    setCatalogStatus(`Searching ${provider}...`);
-    catalogState.results = [];
-    renderCatalogResults();
-
-    try {
-        const response = await fetch(`/api/catalog/search?provider=${encodeURIComponent(provider)}&term=${encodeURIComponent(term)}`);
-        const payload = await response.json();
-
-        if (!response.ok) {
-            throw new Error(payload.error || 'Search failed.');
-        }
-
-        catalogState.results = payload.albums || [];
-        renderCatalogResults();
-
-        if (catalogState.results.length) {
-            setCatalogStatus(`Found ${catalogState.results.length} album${catalogState.results.length === 1 ? '' : 's'}. Import one to fill the form.`);
-        } else {
-            setCatalogStatus('No matching albums found.');
-        }
-    } catch (error) {
-        setCatalogStatus(getCatalogErrorMessage(error), true);
-    } finally {
-        setCatalogLoading(false);
-    }
-}
-
-function populateAlbumForm(album) {
-    catalogState.selectedAlbumSource = album.catalog || null;
-    el('title').value = album.title || '';
-    el('artist').value = album.artist || '';
-    el('year').value = album.year || '';
-    el('cover').value = album.cover || '';
-
-    const discs = el('discs');
-    if (discs) {
-        discs.innerHTML = '';
-        (album.discs || []).forEach((disc, index) => {
-            discs.appendChild(createDiscElement(index, disc.name, disc.tracks || []));
-        });
-    }
-
-    generate();
-}
-
-async function importCatalogAlbum(index) {
-    const selectedAlbum = catalogState.results[index];
-    if (!selectedAlbum) return;
-
-    setCatalogStatus(`Importing ${selectedAlbum.title}...`);
-
-    try {
-        const response = await fetch(`/api/catalog/album?provider=${encodeURIComponent(selectedAlbum.provider)}&id=${encodeURIComponent(selectedAlbum.id)}`);
-        const payload = await response.json();
-
-        if (!response.ok) {
-            throw new Error(payload.error || 'Import failed.');
-        }
-
-        const album = payload.album || {};
-        album.catalog = {
-            provider: selectedAlbum.provider,
-            id: selectedAlbum.id
-        };
-        populateAlbumForm(album);
-        setCatalogStatus(`Imported ${selectedAlbum.title}. Review the form and generate the JSON when ready.`);
-    } catch (error) {
-        setCatalogStatus(getCatalogErrorMessage(error), true);
-    }
-}
-
 function init() {
     el('generate').addEventListener('click', (e) => {
         e.preventDefault();
@@ -373,21 +205,6 @@ function init() {
         copyOutput();
     });
     el('download').addEventListener('click', (e) => { e.preventDefault(); downloadOutput(); });
-    const searchButton = el('catalog-search');
-    if (searchButton) {
-        searchButton.addEventListener('click', (e) => {
-            e.preventDefault();
-            searchCatalog();
-        });
-    }
-    const searchInput = el('catalog-term');
-    if (searchInput) {
-        searchInput.addEventListener('keydown', (e) => {
-            if (e.key !== 'Enter') return;
-            e.preventDefault();
-            searchCatalog();
-        });
-    }
     const addDiscBtn = el('add-disc');
     if (addDiscBtn) addDiscBtn.addEventListener('click', (e) => { e.preventDefault(); const discs = el('discs'); const idx = discs.querySelectorAll('.disc').length; discs.appendChild(createDiscElement(idx)); });
 

@@ -40,7 +40,6 @@ class DialogManager {
 }
 
 const dialogManager = new DialogManager();
-const CATALOG_SYNC_STORAGE_KEY = 'album_catalog_overrides';
 
 function userKey(key) {
     return `user_${currentUser}_${key}`;
@@ -69,42 +68,6 @@ const grid = document.getElementById("album-grid");
 const page = document.getElementById("album-page");
 const searchInput = document.getElementById("search");
 const toggle = document.getElementById("theme-toggle");
-
-function getCatalogOverrides() {
-  try {
-    const raw = localStorage.getItem(CATALOG_SYNC_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch (error) {
-    return {};
-  }
-}
-
-function saveCatalogOverrides(overrides) {
-  localStorage.setItem(CATALOG_SYNC_STORAGE_KEY, JSON.stringify(overrides));
-}
-
-function mergeAlbumData(targetAlbum, sourceAlbum) {
-  targetAlbum.title = sourceAlbum.title || targetAlbum.title;
-  targetAlbum.artist = sourceAlbum.artist || targetAlbum.artist;
-  targetAlbum.year = sourceAlbum.year || targetAlbum.year;
-  targetAlbum.cover = sourceAlbum.cover || targetAlbum.cover;
-  targetAlbum.discs = Array.isArray(sourceAlbum.discs) && sourceAlbum.discs.length ? sourceAlbum.discs : targetAlbum.discs;
-  if (sourceAlbum.catalog) {
-    targetAlbum.catalog = sourceAlbum.catalog;
-  }
-}
-
-function applyCatalogOverrides() {
-  const overrides = getCatalogOverrides();
-  albums.forEach((album) => {
-    const override = overrides[String(album.id)];
-    if (override) {
-      mergeAlbumData(album, override);
-    }
-  });
-}
-
-applyCatalogOverrides();
 
 function setTheme(dark) {
     document.body.classList.toggle("dark", dark);
@@ -273,106 +236,6 @@ function getTruncatedTrackHtml(trackName) {
     return `<span class="track-title">${trackName}</span>`;
 }
 
-  function getCatalogStatusMarkup(album) {
-    const provider = album.catalog && album.catalog.provider ? album.catalog.provider : 'itunes';
-    const hasSyncedData = Boolean(getCatalogOverrides()[String(album.id)]);
-    return `
-      <div class="catalog-tools">
-      <div class="catalog-controls">
-        <label for="catalog-provider">Catalog</label>
-        <select id="catalog-provider">
-        <option value="itunes" ${provider === 'itunes' ? 'selected' : ''}>iTunes</option>
-        <option value="spotify" ${provider === 'spotify' ? 'selected' : ''}>Spotify</option>
-        </select>
-        <button id="catalog-sync-btn" type="button">Sync Tracks</button>
-        <button id="catalog-clear-btn" type="button" ${hasSyncedData ? '' : 'disabled'}>Clear Synced Data</button>
-      </div>
-      <p id="catalog-sync-status" class="catalog-sync-status"></p>
-      </div>
-    `;
-  }
-
-  async function fetchCatalogAlbum(album, provider) {
-    const hasStoredCatalog = album.catalog && album.catalog.provider === provider && album.catalog.id;
-    const endpoint = hasStoredCatalog
-      ? `/api/catalog/album?provider=${encodeURIComponent(provider)}&id=${encodeURIComponent(album.catalog.id)}`
-      : `/api/catalog/match?provider=${encodeURIComponent(provider)}&title=${encodeURIComponent(album.title)}&artist=${encodeURIComponent(album.artist)}`;
-
-    const response = await fetch(endpoint);
-    const payload = await response.json();
-    if (!response.ok) {
-      throw new Error(payload.error || 'Could not load album data from the catalog.');
-    }
-
-    return payload.album;
-  }
-
-  async function syncAlbumFromCatalog(albumId) {
-    const album = albums.find((entry) => entry.id == albumId);
-    const providerSelect = document.getElementById('catalog-provider');
-    const statusEl = document.getElementById('catalog-sync-status');
-    const syncButton = document.getElementById('catalog-sync-btn');
-    const clearButton = document.getElementById('catalog-clear-btn');
-
-    if (!album || !providerSelect || !statusEl || !syncButton || !clearButton) return;
-
-    const provider = providerSelect.value || 'itunes';
-    syncButton.disabled = true;
-    clearButton.disabled = true;
-    statusEl.textContent = `Syncing from ${provider}...`;
-    statusEl.classList.remove('error');
-
-    try {
-      const syncedAlbum = await fetchCatalogAlbum(album, provider);
-      const nextAlbumState = {
-        title: syncedAlbum.title,
-        artist: syncedAlbum.artist,
-        year: syncedAlbum.year,
-        cover: syncedAlbum.cover,
-        discs: syncedAlbum.discs,
-        catalog: syncedAlbum.catalog || { provider, id: syncedAlbum.id }
-      };
-      const overrides = getCatalogOverrides();
-      overrides[String(album.id)] = nextAlbumState;
-      saveCatalogOverrides(overrides);
-      mergeAlbumData(album, nextAlbumState);
-      statusEl.textContent = `Synced ${album.title} from ${provider}.`;
-      clearButton.disabled = false;
-      render(searchInput ? searchInput.value : '');
-    } catch (error) {
-      statusEl.textContent = error.message || 'Could not sync the album.';
-      statusEl.classList.add('error');
-    } finally {
-      syncButton.disabled = false;
-    }
-  }
-
-  function clearAlbumCatalogSync(albumId) {
-    const overrides = getCatalogOverrides();
-    delete overrides[String(albumId)];
-    saveCatalogOverrides(overrides);
-    window.location.reload();
-  }
-
-  function attachAlbumCatalogControls(album) {
-    if (!page || !album) return;
-
-    const syncButton = document.getElementById('catalog-sync-btn');
-    const clearButton = document.getElementById('catalog-clear-btn');
-
-    if (syncButton) {
-      syncButton.addEventListener('click', () => {
-        syncAlbumFromCatalog(album.id);
-      });
-    }
-
-    if (clearButton) {
-      clearButton.addEventListener('click', () => {
-        clearAlbumCatalogSync(album.id);
-      });
-    }
-  }
-
 function render(searchQuery = "") {
     const query = searchQuery.trim().toLowerCase();
 
@@ -434,7 +297,6 @@ function render(searchQuery = "") {
   if (page) {
     const id = new URLSearchParams(window.location.search).get("id");
     const album = albums.find(a => a.id == id);
-    if (!album) return;
     const rating = getAlbumScore(album);
 
     page.innerHTML = `
@@ -460,8 +322,6 @@ function render(searchQuery = "") {
               </div>
           </div>
         </div>
-
-        ${getCatalogStatusMarkup(album)}
 
         <h3>Tracks</h3>
         <div class="tracklist">
@@ -506,8 +366,6 @@ function render(searchQuery = "") {
         </div>
       </div>
     `;
-
-    attachAlbumCatalogControls(album);
   }
 }
 
