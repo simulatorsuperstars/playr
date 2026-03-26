@@ -6,6 +6,16 @@ function getTopTrackName(track) {
   return "Unknown Track";
 }
 
+function getTopTrackDuration(track) {
+  if (!track || typeof track === "string" || !track.durationMs) return "";
+
+  const totalSeconds = Math.round(track.durationMs / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  return minutes + ":" + String(seconds).padStart(2, "0");
+}
+
 function renderTopTracks() {
   if (!list) return;
 
@@ -25,7 +35,8 @@ function renderTopTracks() {
           name: getTopTrackName(track),
           album: album.title,
           artist: album.artist,
-          score: rating
+          score: rating,
+          duration: getTopTrackDuration(track)
         });
             });
         });
@@ -42,7 +53,7 @@ function renderTopTracks() {
         <div class="rank">#${i + 1}</div>
         <div>
           <div class="track-name">${track.name}</div>
-          <div class="track-meta">${track.artist} — ${track.album}</div>
+          <div class="track-meta">${track.artist} — ${track.album}${track.duration ? ` • ${track.duration}` : ""}</div>
         </div>
       </div>
 

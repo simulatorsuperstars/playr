@@ -19,6 +19,7 @@ function renderTopAlbums() {
         <div class="info">
             <h3>${item.album.title}</h3>
             <p>${item.album.artist}</p>
+            <div class="list-submeta">${[item.album.genre, item.album.year].filter(Boolean).join(" • ")}</div>
         </div>
         </div>
 

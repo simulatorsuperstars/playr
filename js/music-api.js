@@ -43,6 +43,67 @@
     });
   }
 
+  function normalizeSongResult(result, fallback = {}) {
+    const trackId = result && result.trackId ? Number(result.trackId) : null;
+    const collectionId = result && result.collectionId ? Number(result.collectionId) : null;
+
+    if (!trackId) return null;
+
+    return {
+      id: trackId,
+      trackId,
+      collectionId,
+      rank: fallback.rank || 0,
+      name: result.trackName || fallback.name || "Unknown Track",
+      artist: result.artistName || fallback.artist || "Unknown Artist",
+      album: result.collectionName || fallback.album || "Unknown Album",
+      cover: toCover(result.artworkUrl100 || result.artworkUrl60 || result.artworkUrl30 || fallback.cover || ""),
+      genre: result.primaryGenreName || fallback.genre || "",
+      previewUrl: result.previewUrl || fallback.previewUrl || "",
+      durationMs: result.trackTimeMillis || fallback.durationMs || 0,
+      explicit: result.trackExplicitness === "explicit",
+      trackUrl: result.trackViewUrl || fallback.trackUrl || "",
+      collectionUrl: result.collectionViewUrl || fallback.collectionUrl || "",
+      artistUrl: result.artistViewUrl || fallback.artistUrl || "",
+      year: result.releaseDate ? Number(String(result.releaseDate).slice(0, 4)) : (fallback.year || null)
+    };
+  }
+
+  async function fetchTopSongs(limit, country) {
+    const url = "https://itunes.apple.com/" + country + "/rss/topsongs/limit=" + limit + "/json";
+    const payload = await fetchJson(url);
+    const entries = (payload && payload.feed && payload.feed.entry) || [];
+    const songSeeds = entries.map((entry, index) => ({
+      rank: index + 1,
+      trackId: entry && entry.id && entry.id.attributes ? Number(entry.id.attributes["im:id"]) : null,
+      name: entry && entry["im:name"] ? entry["im:name"].label : "Unknown Track",
+      artist: entry && entry["im:artist"] ? entry["im:artist"].label : "Unknown Artist",
+      cover: entry && entry["im:image"] && entry["im:image"].length
+        ? entry["im:image"][entry["im:image"].length - 1].label
+        : "",
+      genre: entry && entry.category && entry.category.attributes ? entry.category.attributes.term : ""
+    })).filter((entry) => entry.trackId);
+
+    if (!songSeeds.length) {
+      return [];
+    }
+
+    const lookupUrl = "https://itunes.apple.com/lookup?id=" + songSeeds.map((entry) => entry.trackId).join(",");
+    const lookupPayload = await fetchJson(lookupUrl);
+    const lookupResults = (lookupPayload && lookupPayload.results) || [];
+    const lookupByTrackId = new Map();
+
+    lookupResults.forEach((item) => {
+      if (item && item.wrapperType === "track" && item.kind === "song" && item.trackId) {
+        lookupByTrackId.set(Number(item.trackId), item);
+      }
+    });
+
+    return songSeeds
+      .map((entry) => normalizeSongResult(lookupByTrackId.get(entry.trackId) || {}, entry))
+      .filter(Boolean);
+  }
+
   function mergeUniqueAlbums(baseAlbums, incomingAlbums) {
     const merged = [];
     const seen = new Set();
@@ -69,6 +130,12 @@
       artist: result.artistName || "Unknown Artist",
       year: yearLabel ? Number(String(yearLabel).slice(0, 4)) : null,
       cover: toCover(result.artworkUrl100 || result.artworkUrl60 || result.artworkUrl30 || ""),
+      genre: result.primaryGenreName || "",
+      trackCount: result.trackCount || 0,
+      releaseDate: result.releaseDate || "",
+      collectionUrl: result.collectionViewUrl || "",
+      artistUrl: result.artistViewUrl || "",
+      isExplicit: result.collectionExplicitness === "explicit",
       discs: [{ name: "Disc 1", tracks: [] }]
     };
   }
@@ -98,6 +165,17 @@
     );
   }
 
+  async function fetchSearchSongs(query, limit) {
+    const term = encodeURIComponent(query);
+    const songUrl = "https://itunes.apple.com/search?media=music&entity=song&limit=" + limit + "&term=" + term;
+    const payload = await fetchJson(songUrl);
+    const results = (payload && payload.results) || [];
+
+    return results
+      .map((result, index) => normalizeSongResult(result, { rank: index + 1 }))
+      .filter(Boolean);
+  }
+
   async function fetchTracksForAlbum(album) {
     if (!album.collectionId) return album;
 
@@ -112,7 +190,11 @@
       .sort((a, b) => (a.trackNumber || 0) - (b.trackNumber || 0))
       .map((item) => ({
         name: item.trackName,
-        previewUrl: item.previewUrl || ""
+        previewUrl: item.previewUrl || "",
+        durationMs: item.trackTimeMillis || 0,
+        trackNumber: item.trackNumber || 0,
+        explicit: item.trackExplicitness === "explicit",
+        trackUrl: item.trackViewUrl || ""
       }))
       .filter((track) => track.name);
 
@@ -123,6 +205,12 @@
       artist: album.artist || collection.artistName || "Unknown Artist",
       year: album.year || (yearLabel ? Number(String(yearLabel).slice(0, 4)) : null),
       cover: album.cover || toCover(collection.artworkUrl100 || collection.artworkUrl60 || collection.artworkUrl30 || ""),
+      genre: album.genre || collection.primaryGenreName || "",
+      trackCount: album.trackCount || collection.trackCount || tracks.length,
+      releaseDate: album.releaseDate || collection.releaseDate || "",
+      collectionUrl: album.collectionUrl || collection.collectionViewUrl || "",
+      artistUrl: album.artistUrl || collection.artistViewUrl || "",
+      isExplicit: typeof album.isExplicit === "boolean" ? album.isExplicit : collection.collectionExplicitness === "explicit",
       discs: [{ name: "Disc 1", tracks }]
     };
   }
@@ -154,9 +242,11 @@
   const state = {
     albums: [],
     topAlbums: [],
+    topSongs: [],
     ready: null,
     error: null,
     searchCache: new Map(),
+    songSearchCache: new Map(),
     searchSequence: 0
   };
 
@@ -220,17 +310,39 @@
     return fetchedAlbum;
   };
 
-  state.ready = loadAlbumsFromApi()
-    .then((albums) => {
+  state.searchSongs = async (query) => {
+    const normalizedQuery = String(query || "").trim().toLowerCase();
+
+    if (!normalizedQuery) {
+      return state.topSongs.slice();
+    }
+
+    if (!state.songSearchCache.has(normalizedQuery)) {
+      state.songSearchCache.set(
+        normalizedQuery,
+        fetchSearchSongs(normalizedQuery, SEARCH_LIMIT).catch(() => [])
+      );
+    }
+
+    const songs = await state.songSearchCache.get(normalizedQuery);
+    return Array.isArray(songs) ? songs : [];
+  };
+
+  state.ready = Promise.all([loadAlbumsFromApi(), fetchTopSongs(FEED_LIMIT, FEED_COUNTRY)])
+    .then(([albums, songs]) => {
       state.topAlbums = albums;
       state.albums = albums.slice();
+      state.topSongs = Array.isArray(songs) ? songs : [];
       window.albums = state.albums;
+      window.topSongs = state.topSongs;
       return state.albums;
     })
     .catch((error) => {
       state.error = error;
       state.topAlbums = Array.isArray(window.albums) ? window.albums : [];
       state.albums = state.topAlbums.slice();
+      state.topSongs = Array.isArray(window.topSongs) ? window.topSongs : [];
+      window.topSongs = state.topSongs;
       return state.albums;
     });
 
