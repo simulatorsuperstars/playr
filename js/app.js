@@ -429,6 +429,9 @@ async function syncSearchResults(searchQuery, requestId) {
     const nextTracks = await window.playrData.searchSongs(searchQuery);
     if (requestId !== activeSearchRequest) return;
 
+    await ensureHomeAlbumsLoaded(nextTracks);
+    if (requestId !== activeSearchRequest) return;
+
     homeTracks = Array.isArray(nextTracks) ? nextTracks : [];
     render(searchQuery);
     return;
@@ -1372,11 +1375,41 @@ async function ensureAlbumsLoaded() {
     await window.playrData.ready;
     albums = Array.isArray(window.playrData.albums) ? window.playrData.albums : [];
     homeTracks = Array.isArray(window.playrData.topSongs) ? window.playrData.topSongs.slice() : [];
+    await ensureHomeAlbumsLoaded(homeTracks);
     return;
   }
 
   albums = Array.isArray(window.albums) ? window.albums : [];
   homeTracks = Array.isArray(window.topSongs) ? window.topSongs : [];
+}
+
+async function ensureHomeAlbumsLoaded(tracks = homeTracks) {
+  if (!grid || page || !window.playrData || typeof window.playrData.fetchAlbumById !== "function") {
+    return;
+  }
+
+  const missingIds = Array.from(new Set(
+    (Array.isArray(tracks) ? tracks : [])
+      .map((track) => Number(track && track.collectionId))
+      .filter((collectionId) => collectionId && !getAlbumByCollectionId(collectionId))
+  ));
+
+  if (!missingIds.length) {
+    return;
+  }
+
+  await Promise.all(
+    missingIds.map(async (collectionId) => {
+      try {
+        await window.playrData.fetchAlbumById(collectionId);
+      } catch (error) {
+        return null;
+      }
+      return null;
+    })
+  );
+
+  albums = Array.isArray(window.playrData.albums) ? window.playrData.albums : albums;
 }
 
 async function ensurePageAlbumLoaded() {
